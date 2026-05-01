@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-sample-plugin",
+	"name": "bulk-image-to-file-importer",
 	"version": "1.0.0",
-	"description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+	"description": "Add images to a single file or create a new file for each image in bulk.",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {
@@ -13,17 +13,23 @@
 	"keywords": [],
 	"license": "0-BSD",
 	"devDependencies": {
+		"@eslint/js": "9.30.1",
+		"@types/js-yaml": "^4.0.9",
 		"@types/node": "^16.11.6",
+		"@types/node-geocoder": "^4.2.6",
 		"esbuild": "0.25.5",
 		"eslint-plugin-obsidianmd": "0.1.9",
 		"globals": "14.0.0",
+		"jiti": "2.6.1",
 		"tslib": "2.4.0",
 		"typescript": "^5.8.3",
-		"typescript-eslint": "8.35.1",
-		"@eslint/js": "9.30.1",
-		"jiti": "2.6.1"
+		"typescript-eslint": "8.35.1"
 	},
 	"dependencies": {
+		"@imgly/background-removal": "^1.7.0",
+		"exifreader": "^4.38.1",
+		"js-yaml": "^4.1.1",
+		"node-geocoder": "^4.4.1",
 		"obsidian": "latest"
 	}
 }

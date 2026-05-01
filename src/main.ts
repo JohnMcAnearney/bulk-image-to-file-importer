@@ -1,99 +1,652 @@
-import {App, Editor, MarkdownView, Modal, Notice, Plugin} from 'obsidian';
-import {DEFAULT_SETTINGS, MyPluginSettings, SampleSettingTab} from "./settings";
+import {
+	App,
+	Modal,
+	Notice,
+	Plugin,
+	TFile,
+	TFolder,
+	normalizePath,
+} from "obsidian";
+import { ImageImporterSettings, DEFAULT_SETTINGS, ImageImporterSettingTab } from "./settings";
+import { formatBytes, clampQuality } from "./utilityFunctions";
 
-// Remember to rename these classes and interfaces!
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+
+// ─── Plugin ───────────────────────────────────────────────────────────────────
+
+export default class ImageImporterPlugin extends Plugin {
+	settings!: ImageImporterSettings;
 
 	async onload() {
 		await this.loadSettings();
-
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
+		this.addRibbonIcon("image-plus", "Bulk image to file importer", () => {
+			new ImageImportModal(this.app, this).open();
 		});
-
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
-
-		// This adds a simple command that can be triggered anywhere
 		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
+			id: "open-image-importer",
+			name: "Import",
+			callback: () => new ImageImportModal(this.app, this).open(),
 		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				editor.replaceSelection('Sample editor command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-				return false;
-			}
-		});
-
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			new Notice("Click");
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
-
-	}
-
-	onunload() {
+		this.addSettingTab(new ImageImporterSettingTab(this.app, this));
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<MyPluginSettings>);
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+	}
+	async saveSettings() { await this.saveData(this.settings); }
+
+	// ── Templates ──────────────────────────────────────────────────────────────
+
+	getTemplates(): TFile[] {
+		const folder = this.app.vault.getAbstractFileByPath(
+			normalizePath(this.settings.templateFolder)
+		);
+		if (!folder || !(folder instanceof TFolder)) return [];
+		const out: TFile[] = [];
+		const walk = (f: TFolder) => {
+			for (const c of f.children) {
+				if (c instanceof TFile && c.extension === "md") out.push(c);
+				else if (c instanceof TFolder) walk(c);
+			}
+		};
+		walk(folder);
+		return out;
 	}
 
-	async saveSettings() {
-		await this.saveData(this.settings);
+	async readTemplate(file: TFile): Promise<string> {
+		return this.app.vault.read(file);
+	}
+
+	// ── Image processing ───────────────────────────────────────────────────────
+
+	/** Compress a browser File to JPEG via an off-screen Canvas. quality 1–100. */
+	async compressToJpeg(
+		file: File,
+		quality: number
+	): Promise<{ buffer: ArrayBuffer; ext: "jpg" }> {
+		const q = Math.max(1, Math.min(100, quality)) / 100;
+		const url = URL.createObjectURL(file);
+		const img = await new Promise<HTMLImageElement>((res, rej) => {
+			const el = new Image();
+			el.onload = () => res(el);
+			el.onerror = () => rej(new Error(`Cannot decode ${file.name}`));
+			el.src = url;
+		});
+		URL.revokeObjectURL(url);
+
+		const canvas = document.createElement("canvas");
+		canvas.width = img.naturalWidth;
+		canvas.height = img.naturalHeight;
+		const ctx = canvas.getContext("2d");
+		if (!ctx) throw new Error("Canvas 2D unavailable");
+		ctx.drawImage(img, 0, 0);
+
+		const blob = await new Promise<Blob>((res, rej) =>
+			canvas.toBlob(
+				b => b ? res(b) : rej(new Error("toBlob returned null")),
+				"image/jpeg", q
+			)
+		);
+		return { buffer: await blob.arrayBuffer(), ext: "jpg" };
+	}
+
+	// ── Vault helpers ──────────────────────────────────────────────────────────
+
+	async ensureFolder(path: string) {
+		const p = normalizePath(path);
+		if (!this.app.vault.getAbstractFileByPath(p))
+			await this.app.vault.createFolder(p);
+	}
+
+	// ── Core import ────────────────────────────────────────────────────────────
+
+	async importImages(
+		entries: ImportEntry[],
+		templateContent: string,
+		compress: boolean,
+		quality: number,
+		removeBg: boolean,
+		fileToAddTo: TFile | null,
+		onProgress?: (i: number, total: number, label: string) => void
+	): Promise<{ success: number; errors: string[]; savedBytes: number }> {
+		const results = { success: 0, errors: [] as string[], savedBytes: 0 };
+		const today = new Date().toISOString().split("T")[0];
+
+		// If adding to existing file, read current content
+		let existingFileContent = "";
+		if (fileToAddTo) {
+			existingFileContent = await this.app.vault.read(fileToAddTo);
+		}
+
+		for (let i = 0; i < entries.length; i++) {
+			const { file, imageBaseName, noteTitle } = entries[i]!;
+			onProgress?.(i, entries.length, file.name);
+
+			try {
+				let buffer: ArrayBuffer = await file.arrayBuffer();
+				let ext: string = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
+				const originalSize = file.size;
+
+				// Compress / convert to JPEG
+				// We need a File object for compressToJpeg; wrap buffer if bg was removed
+				if (compress) {
+					const src = removeBg
+						? new File([buffer], `${imageBaseName}.png`, { type: "image/png" })
+						: file;
+					const result = await this.compressToJpeg(src, quality);
+					buffer = result.buffer;
+					ext = result.ext;
+				}
+
+				results.savedBytes += originalSize - buffer.byteLength;
+
+				// Final image filename uses the user-edited imageBaseName
+				const savedFilename = `${imageBaseName}.${ext}`;
+
+				// Write image
+				const imgFolder = normalizePath(this.settings.imageFolder);
+				await this.ensureFolder(imgFolder);
+				const imgPath = normalizePath(`${imgFolder}/${savedFilename}`);
+				if (!this.app.vault.getAbstractFileByPath(imgPath))
+					await this.app.vault.createBinary(imgPath, buffer);
+
+				// Build embed link
+				const embedLink = `![[${savedFilename}]]`;
+				const wikiLink = `"[[${savedFilename}]]"`;
+				const origBase = file.name.replace(/\.[^/.]+$/, "");
+
+				if (fileToAddTo) {
+					// Add to existing file
+					existingFileContent += `\n\n${embedLink}`;
+				} else {
+					// Create new note from template
+					let noteContent = templateContent
+						.replace(/^(image:\s*)$/m, `$1 ${wikiLink}`)
+						.replace(/\{\{image_embed\}\}/gi, embedLink)
+						.replace(/\{\{image_link\}\}/gi, wikiLink)
+						.replace(/\{\{image\}\}/gi, (_m, offset, str) => {
+							const fmEnd = str.indexOf("---", 3);
+							return offset < fmEnd ? wikiLink : embedLink;
+						})
+						.replace(/\{\{title\}\}/gi, noteTitle)
+						.replace(/\{\{filename\}\}/gi, origBase)
+						.replace(/\{\{date\}\}/gi, today!)
+						.replace(/\{\{image_path\}\}/gi, imgPath);
+
+					// Ensure embed in body
+					const fmEnd = noteContent.indexOf("---", 3);
+					const body = fmEnd > -1 ? noteContent.slice(fmEnd + 3) : noteContent;
+					if (!body.includes("![[")) {
+						const at = fmEnd > -1 ? fmEnd + 3 : 0;
+						noteContent =
+							noteContent.slice(0, at) + `\n${embedLink}\n` + noteContent.slice(at);
+					}
+
+					// Write note
+					const notesFolder = normalizePath(this.settings.notesFolder || "");
+					if (notesFolder) await this.ensureFolder(notesFolder);
+					const notePath = normalizePath(
+						`${notesFolder ? notesFolder + "/" : ""}${noteTitle}.md`
+					);
+					if (this.app.vault.getAbstractFileByPath(notePath)) {
+						results.errors.push(`Note already exists: ${noteTitle}.md`);
+						continue;
+					}
+					await this.app.vault.create(notePath, noteContent);
+				}
+				results.success++;
+			} catch (e) {
+				results.errors.push(`${file.name}: ${(e as Error).message}`);
+			}
+		}
+
+		// Write updated content to file if adding to existing
+		if (fileToAddTo) {
+			await this.app.vault.modify(fileToAddTo, existingFileContent);
+		}
+
+		onProgress?.(entries.length, entries.length, "");
+		return results;
 	}
 }
 
-class SampleModal extends Modal {
-	constructor(app: App) {
+// ─── Types shared between plugin and modal ────────────────────────────────────
+
+interface ImportEntry {
+	file: File;
+	imageBaseName: string;   // final image filename (no ext), user-editable
+	noteTitle: string;   // final note title, user-editable
+}
+
+// ─── Modal ────────────────────────────────────────────────────────────────────
+
+class ImageImportModal extends Modal {
+	plugin: ImageImporterPlugin;
+	selectedFiles: File[] = [];
+	selectedTemplate: TFile | null = null;
+	selectedFileToAddTo: TFile | null = null;
+
+	// Per-row state — keyed by file.name (stable)
+	imageNameMap: Map<string, string> = new Map(); // file.name → imageBaseName
+	noteNameMap: Map<string, string> = new Map(); // file.name → noteTitle
+
+	// Options
+	compress = false;
+	quality = 60;
+	removeBg = false;
+
+	private previewDebounce: ReturnType<typeof setTimeout> | null = null;
+
+	constructor(app: App, plugin: ImageImporterPlugin) {
 		super(app);
+		this.plugin = plugin;
+		this.compress = plugin.settings.defaultCompress;
+		this.quality = plugin.settings.defaultQuality;
 	}
 
 	onOpen() {
-		let {contentEl} = this;
-		contentEl.setText('Woah!');
+		const { contentEl } = this;
+		// Resize the Obsidian modal container
+		if (contentEl.parentElement) {
+			contentEl.parentElement.style.maxWidth = "1200px";
+			contentEl.parentElement.style.width = "90vw";
+		}
+		contentEl.empty();
+		contentEl.addClass("image-importer-modal");
+		contentEl.createEl("h2", { text: "Import Images as Notes" });
+
+		// ── 1. Template ────────────────────────────────────────────────────────
+		contentEl.createEl("h3", { text: "1. Choose a template or file to add to" });
+		contentEl.createEl("p", { text: "Select only one option", cls: "image-importer-hint" });
+		
+		const templates = this.plugin.getTemplates();
+		if (templates.length === 0) {
+			contentEl.createEl("p", {
+				text: `No templates found in "${this.plugin.settings.templateFolder}". Check your settings.`,
+				cls: "image-importer-warning",
+			});
+		}
+		
+		// Template selection
+		contentEl.createEl("label", { text: "Template:", cls: "image-importer-section-label" });
+		const templateSelect = contentEl.createEl("select", { cls: "image-importer-select" });
+		templateSelect.createEl("option", { value: "", text: "— Select a template —" });
+		templates.forEach(t =>
+			templateSelect.createEl("option", { value: t.path, text: t.basename })
+		);
+		templateSelect.addEventListener("change", () => {
+			this.selectedTemplate =
+				(this.app.vault.getAbstractFileByPath(templateSelect.value) as TFile) || null;
+			if (this.selectedTemplate) this.selectedFileToAddTo = null;
+			updateImportButton();
+		});
+
+		// Divider
+		contentEl.createEl("hr", { cls: "image-importer-divider" });
+
+		// File search
+		contentEl.createEl("label", { text: "Or search for a file to add to:", cls: "image-importer-section-label" });
+		const fileSearchContainer = contentEl.createDiv({ cls: "image-importer-file-search" });
+		const fileSearchInput = fileSearchContainer.createEl("input", {
+			type: "text",
+			placeholder: "Search files in vault...",
+			cls: "image-importer-file-search-input",
+		}) as HTMLInputElement;
+
+		const fileResultsList = fileSearchContainer.createDiv({ cls: "image-importer-file-results" });
+		let searchTimeout: ReturnType<typeof setTimeout> | null = null;
+
+		fileSearchInput.addEventListener("input", () => {
+			if (searchTimeout) clearTimeout(searchTimeout);
+			const query = fileSearchInput.value.trim().toLowerCase();
+
+			if (query.length === 0) {
+				fileResultsList.empty();
+				return;
+			}
+
+			searchTimeout = setTimeout(() => {
+				fileResultsList.empty();
+				const allFiles: TFile[] = [];
+				const walk = (folder: TFolder) => {
+					for (const child of folder.children) {
+						if (child instanceof TFile && child.extension === "md") allFiles.push(child);
+						else if (child instanceof TFolder) walk(child);
+					}
+				};
+				walk(this.app.vault.getRoot());
+
+				const matches = allFiles
+					.filter(f => f.path.toLowerCase().includes(query))
+					.slice(0, 10);
+
+				if (matches.length === 0) {
+					fileResultsList.createEl("div", { text: "No files found", cls: "image-importer-file-result-empty" });
+					return;
+				}
+
+				matches.forEach(f => {
+					const resultItem = fileResultsList.createDiv({ cls: "image-importer-file-result" });
+					resultItem.createEl("span", { text: f.path, cls: "image-importer-file-result-text" });
+					resultItem.addEventListener("click", () => {
+						this.selectedFileToAddTo = f;
+						this.selectedTemplate = null;
+						templateSelect.value = "";
+						fileSearchInput.value = f.path;
+						fileResultsList.empty();
+						updateImportButton();
+					});
+				});
+			}, 300);
+		});
+
+		// ── 2. Image picker ────────────────────────────────────────────────────
+		contentEl.createEl("h3", { text: "2. Select images" });
+		const dropZone = contentEl.createDiv({ cls: "image-importer-dropzone" });
+		dropZone.createEl("p", { text: "Drop images here or click to browse" });
+		dropZone.createEl("p", { text: "PNG · JPG · WEBP · GIF supported", cls: "image-importer-hint" });
+
+		const fileInput = contentEl.createEl("input", { type: "file", cls: "image-importer-hidden-input" });
+		fileInput.multiple = true;
+		fileInput.accept = "image/*";
+
+		dropZone.addEventListener("click", () => fileInput.click());
+		dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.addClass("drag-over"); });
+		dropZone.addEventListener("dragleave", () => dropZone.removeClass("drag-over"));
+		dropZone.addEventListener("drop", e => {
+			e.preventDefault(); dropZone.removeClass("drag-over");
+			if (e.dataTransfer?.files) handleFiles(Array.from(e.dataTransfer.files));
+		});
+		fileInput.addEventListener("change", () => {
+			if (fileInput.files) handleFiles(Array.from(fileInput.files));
+		});
+
+		const fileListEl = contentEl.createDiv({ cls: "image-importer-filelist" });
+
+		// ── 3. Options (compression + bg removal) ─────────────────────────────
+		contentEl.createEl("h3", { text: "3. Options" });
+		const optionsBox = contentEl.createDiv({ cls: "image-importer-options-box" });
+
+		// — Compression —
+		const compressRow = optionsBox.createDiv({ cls: "image-importer-option-row" });
+		const compCb = compressRow.createEl("input", { type: "checkbox" });
+		compCb.id = "img-compress-toggle";
+		compCb.checked = this.compress;
+		const compLabel = compressRow.createEl("label", { text: "Convert to JPEG and compress" });
+		compLabel.htmlFor = "img-compress-toggle";
+
+		// Quality integer input (shown when compress is on)
+		const qualityRow = optionsBox.createDiv({ cls: "image-importer-quality-row" });
+		qualityRow.style.display = this.compress ? "flex" : "none";
+		qualityRow.createEl("label", { text: "Quality (1–100)", cls: "image-importer-quality-label" });
+		const qualityInput = qualityRow.createEl("input", { type: "number" }) as HTMLInputElement;
+		qualityInput.min = "1";
+		qualityInput.max = "100";
+		qualityInput.value = String(this.quality);
+		qualityInput.addClass("image-importer-quality-input");
+		qualityRow.createEl("span", { text: "Lower = smaller file, more artefacts", cls: "image-importer-hint" });
+
+		compCb.addEventListener("change", () => {
+			this.compress = compCb.checked;
+			qualityRow.style.display = this.compress ? "flex" : "none";
+			if (this.selectedFiles.length > 0) schedulePreview();
+		});
+		qualityInput.addEventListener("change", () => {
+			this.quality = clampQuality(parseInt(qualityInput.value) || this.quality);
+			qualityInput.value = String(this.quality);
+			if (this.compress && this.selectedFiles.length > 0) schedulePreview();
+		});
+		qualityInput.addEventListener("input", () => {
+			const v = parseInt(qualityInput.value);
+			if (!isNaN(v)) {
+				this.quality = clampQuality(v);
+				schedulePreview();
+			}
+		});
+
+		// Divider
+		optionsBox.createEl("hr", { cls: "image-importer-divider" });
+
+		// ── 4. Name review table ───────────────────────────────────────────────
+		const nameSection = contentEl.createDiv({ cls: "image-importer-name-section" });
+		nameSection.style.display = "none";
+		nameSection.createEl("h3", { text: "4. Review filenames & note titles" });
+
+		// Bulk rename toolbar
+		const bulkRow = nameSection.createDiv({ cls: "image-importer-bulk-row" });
+		const bulkInput = bulkRow.createEl("input", {
+			type: "text",
+			placeholder: "Base name e.g. Italy_pics_day_one",
+			cls: "image-importer-bulk-input",
+		}) as HTMLInputElement;
+		const applyImageBtn = bulkRow.createEl("button", {
+			text: "Apply to image names",
+			cls: "image-importer-bulk-btn",
+		});
+		const applyNoteBtn = bulkRow.createEl("button", {
+			text: "Apply to note titles",
+			cls: "image-importer-bulk-btn",
+		});
+		bulkRow.createEl("span", {
+			text: "Appends _1, _2 … to each row",
+			cls: "image-importer-hint",
+		});
+
+		// Table
+		const tableWrapper = nameSection.createDiv({ cls: "image-importer-table-wrapper" });
+		const nameTable = tableWrapper.createEl("table", { cls: "image-importer-table" });
+		const thead = nameTable.createEl("thead");
+		const hrow = thead.createEl("tr");
+		hrow.createEl("th", { text: "Original file" });
+		hrow.createEl("th", { text: "Image filename" });
+		hrow.createEl("th", { text: "Size" });
+		hrow.createEl("th", { text: "Note title" });
+		const tbody = nameTable.createEl("tbody");
+
+		// Bulk apply handlers
+		applyImageBtn.addEventListener("click", () => {
+			const base = bulkInput.value.trim();
+			if (!base) { new Notice("Enter a base name first."); return; }
+			this.selectedFiles.forEach((f, idx) => {
+				const newName = `${base}_${idx + 1}`;
+				this.imageNameMap.set(f.name, newName);
+				const input = tbody.querySelector<HTMLInputElement>(
+					`tr[data-file="${CSS.escape(f.name)}"] .img-name-input`
+				);
+				if (input) input.value = newName;
+			});
+		});
+
+		applyNoteBtn.addEventListener("click", () => {
+			const base = bulkInput.value.trim();
+			if (!base) { new Notice("Enter a base name first."); return; }
+			this.selectedFiles.forEach((f, idx) => {
+				const newName = `${base}_${idx + 1}`;
+				this.noteNameMap.set(f.name, newName);
+				const input = tbody.querySelector<HTMLInputElement>(
+					`tr[data-file="${CSS.escape(f.name)}"] .note-name-input`
+				);
+				if (input) input.value = newName;
+			});
+		});
+
+		// ── Import button + progress ───────────────────────────────────────────
+		const buttonRow = contentEl.createDiv({ cls: "image-importer-buttons" });
+		const progressEl = buttonRow.createDiv({ cls: "image-importer-progress" });
+		progressEl.style.display = "none";
+		const importBtn = buttonRow.createEl("button", { text: "Import", cls: "mod-cta" });
+		importBtn.disabled = true;
+
+		// ── Helpers ────────────────────────────────────────────────────────────
+
+		const updateImportButton = () => {
+			importBtn.disabled = this.selectedFiles.length === 0 || (!this.selectedTemplate && !this.selectedFileToAddTo);
+		};
+
+		const schedulePreview = () => {
+			if (this.previewDebounce) clearTimeout(this.previewDebounce);
+			this.previewDebounce = setTimeout(() => refreshSizePreviews(), 450);
+		};
+
+		const refreshSizePreviews = async () => {
+			for (const f of this.selectedFiles) {
+				const cell = tbody.querySelector<HTMLElement>(
+					`tr[data-file="${CSS.escape(f.name)}"] .size-cell`
+				);
+				if (!cell) continue;
+
+				if (!this.compress) {
+					cell.textContent = formatBytes(f.size);
+					cell.className = "size-cell";
+					continue;
+				}
+
+				cell.textContent = "estimating…";
+				cell.className = "size-cell size-estimating";
+
+				try {
+					const { buffer } = await this.plugin.compressToJpeg(f, this.quality);
+					const ns = buffer.byteLength;
+					const pct = Math.round((1 - ns / f.size) * 100);
+					cell.textContent = ns < f.size
+						? `${formatBytes(ns)} (−${pct}%)`
+						: `${formatBytes(ns)} (+${Math.abs(pct)}%)`;
+					cell.className = "size-cell " + (ns < f.size ? "size-smaller" : "size-larger");
+				} catch {
+					cell.textContent = "preview failed";
+					cell.className = "size-cell size-error";
+				}
+			}
+		};
+
+		const handleFiles = (files: File[]) => {
+			const imgs = files.filter(f => f.type.startsWith("image/"));
+			if (imgs.length === 0) { new Notice("No image files detected."); return; }
+
+			this.selectedFiles = imgs;
+			fileListEl.empty();
+			tbody.empty();
+			this.imageNameMap.clear();
+			this.noteNameMap.clear();
+
+			for (const f of imgs) {
+				// Pill
+				const pill = fileListEl.createDiv({ cls: "image-importer-pill" });
+				pill.createEl("span", { text: f.name });
+				const rm = pill.createEl("button", { text: "×" });
+				rm.addEventListener("click", () => {
+					this.selectedFiles = this.selectedFiles.filter(x => x !== f);
+					pill.remove();
+					tbody.querySelectorAll(`tr[data-file="${CSS.escape(f.name)}"]`).forEach(r => r.remove());
+					this.imageNameMap.delete(f.name);
+					this.noteNameMap.delete(f.name);
+					if (this.selectedFiles.length === 0) nameSection.style.display = "none";
+					updateImportButton();
+				});
+
+				const origBase = f.name.replace(/\.[^/.]+$/, "");
+				this.imageNameMap.set(f.name, origBase);
+				this.noteNameMap.set(f.name, origBase);
+
+				const row = tbody.createEl("tr");
+				row.dataset.file = f.name;
+
+				// Col 1: original filename (read-only label)
+				row.createEl("td", { text: f.name, cls: "orig-file-cell" });
+
+				// Col 2: editable image filename
+				const imgCell = row.createEl("td");
+				const imgInput = imgCell.createEl("input", {
+					type: "text",
+					value: origBase,
+					cls: "image-importer-name-input img-name-input",
+				}) as HTMLInputElement;
+				imgInput.addEventListener("input", () => {
+					this.imageNameMap.set(f.name, imgInput.value.trim() || origBase);
+				});
+
+				// Col 3: size preview
+				const sizeCell = row.createEl("td");
+				sizeCell.addClass("size-cell");
+				sizeCell.textContent = formatBytes(f.size);
+
+				// Col 4: editable note title
+				const noteCell = row.createEl("td");
+				const noteInput = noteCell.createEl("input", {
+					type: "text",
+					value: origBase,
+					cls: "image-importer-name-input note-name-input",
+				}) as HTMLInputElement;
+				noteInput.addEventListener("input", () => {
+					this.noteNameMap.set(f.name, noteInput.value.trim() || origBase);
+				});
+			}
+
+			nameSection.style.display = "block";
+			updateImportButton();
+			if (this.compress) refreshSizePreviews();
+		};
+
+		// ── Import ─────────────────────────────────────────────────────────────
+		importBtn.addEventListener("click", async () => {
+			if (!this.selectedTemplate && !this.selectedFileToAddTo) { 
+				new Notice("Please select a template or file first."); 
+				return; 
+			}
+			if (this.selectedFiles.length === 0) { new Notice("Please select at least one image."); return; }
+
+			importBtn.disabled = true;
+			importBtn.textContent = this.removeBg ? "Removing backgrounds…" : "Importing…";
+			progressEl.style.display = "block";
+			progressEl.textContent = `0 / ${this.selectedFiles.length}`;
+
+			let templateContent = "";
+			if (this.selectedTemplate) {
+				templateContent = await this.plugin.readTemplate(this.selectedTemplate);
+			}
+
+			const entries: ImportEntry[] = this.selectedFiles.map(f => ({
+				file: f,
+				imageBaseName: this.imageNameMap.get(f.name) || f.name.replace(/\.[^/.]+$/, ""),
+				noteTitle: this.noteNameMap.get(f.name) || f.name.replace(/\.[^/.]+$/, ""),
+			}));
+
+			const results = await this.plugin.importImages(
+				entries,
+				templateContent,
+				this.compress,
+				this.quality,
+				this.removeBg,
+				this.selectedFileToAddTo,
+				(i, total, label) => {
+					progressEl.textContent = label
+						? `${i + 1} / ${total}: ${label}`
+						: "Done";
+				}
+			);
+
+			progressEl.style.display = "none";
+
+			const savedMsg = results.savedBytes > 0
+				? ` Saved ${formatBytes(results.savedBytes)}.` : "";
+
+			if (results.errors.length > 0) {
+				new Notice(
+					`Imported ${results.success} note(s).${savedMsg}\n` +
+					`${results.errors.length} error(s):\n${results.errors.join("\n")}`,
+					8000
+				);
+				importBtn.disabled = false;
+				importBtn.textContent = "Import";
+			} else {
+				new Notice(`✓ Imported ${results.success} note(s).${savedMsg}`);
+				this.close();
+			}
+		});
 	}
 
 	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
+		if (this.previewDebounce) clearTimeout(this.previewDebounce);
+		this.contentEl.empty();
 	}
 }

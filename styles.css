@@ -1,8 +1,414 @@
-/*
+/* ─── Modal ─────────────────────────────────────────────────────────────── */
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
+.image-importer-modal {
+    padding: 1.5rem;
+}
 
-If your plugin does not need CSS, delete this file.
+.image-importer-modal h2 {
+    margin-bottom: 1.5rem;
+    font-size: 1.3rem;
+    font-weight: 600;
+}
 
-*/
+.image-importer-modal h3 {
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-normal);
+}
+
+/* ─── Select & Inputs ───────────────────────────────────────────────────── */
+
+.image-importer-bulk-input,
+.image-importer-quality-input,
+.image-importer-name-input {
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+    border: 1px solid var(--background-modifier-border);
+    background-color: var(--background-secondary);
+    color: var(--text-normal);
+    font-size: 0.9rem;
+    transition: border-color 150ms ease;
+}
+
+.image-importer-select {
+    border-radius: 4px;
+    border: 1px solid var(--background-modifier-border);
+    background-color: var(--background-secondary);
+    color: var(--text-normal);
+    font-size: 0.9rem;
+    transition: border-color 150ms ease;
+    width: 100%;
+    max-width: 100%;
+    z-index: 1000;
+    position: relative;
+}
+
+.image-importer-section-label {
+    display: block;
+    margin: 0.75rem 0 0.5rem 0;
+    font-weight: 500;
+    color: var(--text-normal);
+    font-size: 0.95rem;
+}
+
+.image-importer-file-search {
+    border-radius: 4px;
+    border: 1px solid var(--background-modifier-border);
+    background-color: var(--background-secondary);
+    color: var(--text-normal);
+    font-size: 0.9rem;
+    transition: border-color 150ms ease;
+    margin: 1rem 0;
+    position: relative;
+}
+
+.image-importer-file-search-input {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+    border: 1px solid var(--background-modifier-border);
+    background-color: var(--background-secondary);
+    color: var(--text-normal);
+    font-size: 0.9rem;
+    transition: border-color 150ms ease;
+}
+
+.image-importer-file-search-input:focus {
+    outline: none;
+    border-color: var(--interactive-accent);
+}
+
+.image-importer-file-results {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background-color: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    max-height: 250px;
+    overflow-y: auto;
+    z-index: 1001;
+}
+
+.image-importer-file-result {
+    padding: 0.75rem;
+    cursor: pointer;
+    transition: background-color 150ms ease;
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.image-importer-file-result:last-child {
+    border-bottom: none;
+}
+
+.image-importer-file-result:hover {
+    background-color: var(--background-modifier-hover);
+}
+
+.image-importer-file-result-text {
+    font-size: 0.9rem;
+    color: var(--text-normal);
+    font-family: var(--font-monospace);
+    word-break: break-word;
+}
+
+.image-importer-file-result-empty {
+    padding: 1rem;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.image-importer-select:focus,
+.image-importer-bulk-input:focus,
+.image-importer-quality-input:focus,
+.image-importer-name-input:focus {
+    outline: none;
+    border-color: var(--interactive-accent);
+}
+
+/* ─── Drop Zone ─────────────────────────────────────────────────────────── */
+
+.image-importer-dropzone {
+    padding: 2rem;
+    border: 2px dashed var(--background-modifier-border);
+    border-radius: 6px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 150ms ease;
+    background-color: var(--background-secondary);
+    margin-bottom: 1rem;
+}
+
+.image-importer-dropzone:hover {
+    border-color: var(--interactive-accent);
+    background-color: var(--background-modifier-hover);
+}
+
+.image-importer-dropzone.drag-over {
+    border-color: var(--interactive-accent);
+    background-color: var(--background-accent);
+}
+
+.image-importer-dropzone p {
+    margin: 0.5rem 0;
+}
+
+.image-importer-hint {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+/* ─── File List & Pills ─────────────────────────────────────────────────── */
+
+.image-importer-filelist {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin: 1rem 0;
+}
+
+.image-importer-pill {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.875rem;
+    background-color: var(--background-modifier-hover);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    font-size: 0.9rem;
+    color: var(--text-normal);
+}
+
+.image-importer-pill button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.25rem;
+    height: 1.25rem;
+    padding: 0;
+    margin: 0;
+    background-color: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 1.1rem;
+    line-height: 1;
+    transition: all 150ms ease;
+}
+
+.image-importer-pill button:hover {
+    background-color: var(--background-modifier-border);
+    color: var(--text-normal);
+}
+
+/* ─── Options Box ───────────────────────────────────────────────────────── */
+
+.image-importer-options-box {
+    background-color: var(--background-secondary);
+    padding: 1rem;
+    border-radius: 6px;
+    margin: 1rem 0;
+}
+
+.image-importer-option-row,
+.image-importer-quality-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 0.75rem 0;
+}
+
+.image-importer-option-row input[type="checkbox"] {
+    cursor: pointer;
+}
+
+.image-importer-option-row label,
+.image-importer-quality-label {
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.95rem;
+}
+
+.image-importer-quality-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+}
+
+.image-importer-quality-input {
+    width: 80px;
+}
+
+.image-importer-divider {
+    border: none;
+    border-top: 1px solid var(--background-modifier-border);
+    margin: 1rem 0;
+}
+
+/* ─── Name Section & Table ──────────────────────────────────────────────── */
+
+.image-importer-name-section {
+    margin-top: 1.5rem;
+}
+
+.image-importer-bulk-row {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.image-importer-bulk-input {
+    flex: 1;
+    min-width: 250px;
+}
+
+.image-importer-bulk-btn {
+    padding: 0.5rem 1rem;
+    background-color: var(--interactive-normal);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    color: var(--text-normal);
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 150ms ease;
+}
+
+.image-importer-bulk-btn:hover {
+    background-color: var(--interactive-hover);
+}
+
+.image-importer-bulk-btn:active {
+    background-color: var(--interactive-accent);
+}
+
+/* ─── Table ─────────────────────────────────────────────────────────────── */
+
+.image-importer-table-wrapper {
+    overflow-x: auto;
+    margin: 1rem 0;
+    border-radius: 6px;
+    border: 1px solid var(--background-modifier-border);
+}
+
+.image-importer-table {
+    width: 100%;
+    min-width: 700px;
+    border-collapse: collapse;
+    margin: 0;
+    font-size: 0.9rem;
+    background-color: var(--background-secondary);
+    border-radius: 0;
+    overflow: visible;
+    border: none;
+}
+
+.image-importer-table thead {
+    background-color: var(--background-modifier-hover);
+}
+
+.image-importer-table th {
+    padding: 0.875rem 1rem;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-normal);
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.image-importer-table td {
+    padding: 0.875rem 1rem;
+    border-bottom: 1px solid var(--background-modifier-border);
+    vertical-align: middle;
+}
+
+.image-importer-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.image-importer-table tbody tr:hover {
+    background-color: var(--background-modifier-hover);
+}
+
+.orig-file-cell {
+    font-family: var(--font-monospace);
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    word-break: break-word;
+}
+
+.size-cell {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
+.size-smaller {
+    color: var(--text-success);
+    font-weight: 500;
+}
+
+.size-larger {
+    color: var(--text-warning);
+}
+
+.size-error {
+    color: var(--text-error);
+}
+
+.size-estimating {
+    font-style: italic;
+    opacity: 0.7;
+}
+
+/* ─── Buttons & Progress ────────────────────────────────────────────────── */
+
+.image-importer-buttons {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1.5rem;
+    align-items: center;
+}
+
+.image-importer-buttons button.mod-cta {
+    padding: 0.625rem 1.5rem;
+    border-radius: 4px;
+    font-weight: 500;
+    transition: all 150ms ease;
+}
+
+.image-importer-buttons button.mod-cta:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.image-importer-progress {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    background-color: var(--background-modifier-hover);
+    border-radius: 4px;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+/* ─── Utility ───────────────────────────────────────────────────────────── */
+
+.image-importer-hidden-input {
+    display: none;
+}
+
+.image-importer-warning {
+    padding: 1rem;
+    background-color: var(--background-modifier-border);
+    border-left: 4px solid var(--text-warning);
+    border-radius: 4px;
+    color: var(--text-normal);
+    margin: 1rem 0;
+}

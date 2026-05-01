@@ -1,11 +1,11 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
+	"id": "Bulk-Image-to-File-Importer",
+	"name": "Bulk Image to File Importer",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
+	"description": "Add images to a single file or create a new file for each image in bulk.",
+	"author": "JohnMcAnearney",
+	"authorUrl": "https://johnmcanearney.com/",
 	"fundingUrl": "https://obsidian.md/pricing",
 	"isDesktopOnly": false
 }
