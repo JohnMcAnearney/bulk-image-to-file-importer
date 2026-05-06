@@ -31,7 +31,11 @@ export default class ImageImporterPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		this.settings = Object.assign(
+			{},
+			DEFAULT_SETTINGS,
+			(await this.loadData()) as Partial<ImageImporterSettings>
+		);
 	}
 	async saveSettings() { await this.saveData(this.settings); }
 
@@ -105,7 +109,6 @@ export default class ImageImporterPlugin extends Plugin {
 		templateContent: string,
 		compress: boolean,
 		quality: number,
-		removeBg: boolean,
 		fileToAddTo: TFile | null,
 		onProgress?: (i: number, total: number, label: string) => void
 	): Promise<{ success: number; errors: string[]; savedBytes: number }> {
@@ -130,10 +133,7 @@ export default class ImageImporterPlugin extends Plugin {
 				// Compress / convert to JPEG
 				// We need a File object for compressToJpeg; wrap buffer if bg was removed
 				if (compress) {
-					const src = removeBg
-						? new File([buffer], `${imageBaseName}.png`, { type: "image/png" })
-						: file;
-					const result = await this.compressToJpeg(src, quality);
+					const result = await this.compressToJpeg(file, quality);
 					buffer = result.buffer;
 					ext = result.ext;
 				}
@@ -153,25 +153,26 @@ export default class ImageImporterPlugin extends Plugin {
 				// Build embed link
 				const embedLink = `![[${savedFilename}]]`;
 				const wikiLink = `"[[${savedFilename}]]"`;
-				const origBase = file.name.replace(/\.[^/.]+$/, "");
 
 				if (fileToAddTo) {
 					// Add to existing file
 					existingFileContent += `\n\n${embedLink}`;
 				} else {
 					// Create new note from template
-					let noteContent = templateContent
+					const templateInput: string = templateContent;
+
+					let noteContent: string = templateInput
 						.replace(/^(image:\s*)$/m, `$1 ${wikiLink}`)
-						.replace(/\{\{image_embed\}\}/gi, embedLink)
-						.replace(/\{\{image_link\}\}/gi, wikiLink)
-						.replace(/\{\{image\}\}/gi, (_m, offset, str) => {
-							const fmEnd = str.indexOf("---", 3);
-							return offset < fmEnd ? wikiLink : embedLink;
-						})
-						.replace(/\{\{title\}\}/gi, noteTitle)
-						.replace(/\{\{filename\}\}/gi, origBase)
-						.replace(/\{\{date\}\}/gi, today!)
-						.replace(/\{\{image_path\}\}/gi, imgPath);
+						.replace(/\{\{date\}\}/gi, today!);
+
+					// const noteContent_4: string = noteContent_1
+					// 	.replace(/\{\{image\}\}/gi, (_m, offset, str) => {
+					// 		const fmEnd: number = str.indexOf("---", 3);
+					// 		return offset < fmEnd ? wikiLink : embedLink;
+					// 	})
+
+					// const noteContent_5: string = noteContent_1
+					// let noteContent: string = noteContent_5;
 
 					// Ensure embed in body
 					const fmEnd = noteContent.indexOf("---", 3);
@@ -233,7 +234,6 @@ class ImageImportModal extends Modal {
 	// Options
 	compress = false;
 	quality = 60;
-	removeBg = false;
 
 	private previewDebounce: ReturnType<typeof setTimeout> | null = null;
 
@@ -248,17 +248,16 @@ class ImageImportModal extends Modal {
 		const { contentEl } = this;
 		// Resize the Obsidian modal container
 		if (contentEl.parentElement) {
-			contentEl.parentElement.style.maxWidth = "1200px";
-			contentEl.parentElement.style.width = "90vw";
+			contentEl.parentElement.addClass("image-importer-modal-parent");
 		}
 		contentEl.empty();
 		contentEl.addClass("image-importer-modal");
-		contentEl.createEl("h2", { text: "Import Images as Notes" });
+		contentEl.createEl("h2", { text: "Import images as notes" });
 
 		// ── 1. Template ────────────────────────────────────────────────────────
-		contentEl.createEl("h3", { text: "1. Choose a template or file to add to" });
-		contentEl.createEl("p", { text: "Select only one option", cls: "image-importer-hint" });
-		
+		contentEl.createEl("h3", { text: "Option 1. Create a note from a template" });
+		contentEl.createEl("p", { text: "Your template *must* have a property named 'image' and be of type text.", cls: "image-importer-hint" });
+
 		const templates = this.plugin.getTemplates();
 		if (templates.length === 0) {
 			contentEl.createEl("p", {
@@ -266,17 +265,17 @@ class ImageImportModal extends Modal {
 				cls: "image-importer-warning",
 			});
 		}
-		
+
 		// Template selection
 		contentEl.createEl("label", { text: "Template:", cls: "image-importer-section-label" });
 		const templateSelect = contentEl.createEl("select", { cls: "image-importer-select" });
-		templateSelect.createEl("option", { value: "", text: "— Select a template —" });
+		templateSelect.createEl("option", { value: "", text: "Select a template" });
 		templates.forEach(t =>
 			templateSelect.createEl("option", { value: t.path, text: t.basename })
 		);
 		templateSelect.addEventListener("change", () => {
-			this.selectedTemplate =
-				(this.app.vault.getAbstractFileByPath(templateSelect.value) as TFile) || null;
+			const templateFile = this.app.vault.getAbstractFileByPath(templateSelect.value);
+			this.selectedTemplate = templateFile instanceof TFile ? templateFile : null;
 			if (this.selectedTemplate) this.selectedFileToAddTo = null;
 			updateImportButton();
 		});
@@ -285,18 +284,19 @@ class ImageImportModal extends Modal {
 		contentEl.createEl("hr", { cls: "image-importer-divider" });
 
 		// File search
-		contentEl.createEl("label", { text: "Or search for a file to add to:", cls: "image-importer-section-label" });
+		contentEl.createEl("h3", { text: "Option 2. Append images to an existing note" });
+		contentEl.createEl("label", { text: "Search for a file:", cls: "image-importer-section-label" });
 		const fileSearchContainer = contentEl.createDiv({ cls: "image-importer-file-search" });
 		const fileSearchInput = fileSearchContainer.createEl("input", {
 			type: "text",
 			placeholder: "Search files in vault...",
 			cls: "image-importer-file-search-input",
-		}) as HTMLInputElement;
+		}); //as HTMLInputElement;
 
 		const fileResultsList = fileSearchContainer.createDiv({ cls: "image-importer-file-results" });
 		let searchTimeout: ReturnType<typeof setTimeout> | null = null;
 
-		fileSearchInput.addEventListener("input", () => {
+		fileSearchInput.addEventListener("input", (): void => {
 			if (searchTimeout) clearTimeout(searchTimeout);
 			const query = fileSearchInput.value.trim().toLowerCase();
 
@@ -316,19 +316,19 @@ class ImageImportModal extends Modal {
 				};
 				walk(this.app.vault.getRoot());
 
-				const matches = allFiles
+				const matches: TFile[] = allFiles
 					.filter(f => f.path.toLowerCase().includes(query))
 					.slice(0, 10);
 
 				if (matches.length === 0) {
-					fileResultsList.createEl("div", { text: "No files found", cls: "image-importer-file-result-empty" });
+					fileResultsList.createEl("div", { text: "No files found.", cls: "image-importer-file-result-empty" });
 					return;
 				}
 
 				matches.forEach(f => {
 					const resultItem = fileResultsList.createDiv({ cls: "image-importer-file-result" });
 					resultItem.createEl("span", { text: f.path, cls: "image-importer-file-result-text" });
-					resultItem.addEventListener("click", () => {
+					resultItem.addEventListener("click", (): void => {
 						this.selectedFileToAddTo = f;
 						this.selectedTemplate = null;
 						templateSelect.value = "";
@@ -341,10 +341,11 @@ class ImageImportModal extends Modal {
 		});
 
 		// ── 2. Image picker ────────────────────────────────────────────────────
-		contentEl.createEl("h3", { text: "2. Select images" });
+		const helperText: string = "PNG · JPG · WEBP · GIF supported";
+		contentEl.createEl("h3", { text: "2. Select images." });
 		const dropZone = contentEl.createDiv({ cls: "image-importer-dropzone" });
 		dropZone.createEl("p", { text: "Drop images here or click to browse" });
-		dropZone.createEl("p", { text: "PNG · JPG · WEBP · GIF supported", cls: "image-importer-hint" });
+		dropZone.createEl("p", { text: helperText, cls: "image-importer-hint" });
 
 		const fileInput = contentEl.createEl("input", { type: "file", cls: "image-importer-hidden-input" });
 		fileInput.multiple = true;
@@ -377,18 +378,19 @@ class ImageImportModal extends Modal {
 
 		// Quality integer input (shown when compress is on)
 		const qualityRow = optionsBox.createDiv({ cls: "image-importer-quality-row" });
-		qualityRow.style.display = this.compress ? "flex" : "none";
+		if (!this.compress) qualityRow.addClass("hidden");
 		qualityRow.createEl("label", { text: "Quality (1–100)", cls: "image-importer-quality-label" });
-		const qualityInput = qualityRow.createEl("input", { type: "number" }) as HTMLInputElement;
+		const qualityInput = qualityRow.createEl("input", { type: "number" });
 		qualityInput.min = "1";
 		qualityInput.max = "100";
 		qualityInput.value = String(this.quality);
 		qualityInput.addClass("image-importer-quality-input");
-		qualityRow.createEl("span", { text: "Lower = smaller file, more artefacts", cls: "image-importer-hint" });
+		qualityRow.createEl("span", { text: "Lower = smaller file, more artifacts.", cls: "image-importer-hint" });
 
 		compCb.addEventListener("change", () => {
 			this.compress = compCb.checked;
-			qualityRow.style.display = this.compress ? "flex" : "none";
+			if (this.compress) qualityRow.removeClass("hidden");
+			else qualityRow.addClass("hidden");
 			if (this.selectedFiles.length > 0) schedulePreview();
 		});
 		qualityInput.addEventListener("change", () => {
@@ -408,17 +410,16 @@ class ImageImportModal extends Modal {
 		optionsBox.createEl("hr", { cls: "image-importer-divider" });
 
 		// ── 4. Name review table ───────────────────────────────────────────────
-		const nameSection = contentEl.createDiv({ cls: "image-importer-name-section" });
-		nameSection.style.display = "none";
+		const nameSection = contentEl.createDiv({ cls: "image-importer-name-section hidden" });
 		nameSection.createEl("h3", { text: "4. Review filenames & note titles" });
 
 		// Bulk rename toolbar
 		const bulkRow = nameSection.createDiv({ cls: "image-importer-bulk-row" });
 		const bulkInput = bulkRow.createEl("input", {
 			type: "text",
-			placeholder: "Base name e.g. Italy_pics_day_one",
+			placeholder: "Base name e.g. Italy-pics_day_one",
 			cls: "image-importer-bulk-input",
-		}) as HTMLInputElement;
+		});
 		const applyImageBtn = bulkRow.createEl("button", {
 			text: "Apply to image names",
 			cls: "image-importer-bulk-btn",
@@ -472,8 +473,7 @@ class ImageImportModal extends Modal {
 
 		// ── Import button + progress ───────────────────────────────────────────
 		const buttonRow = contentEl.createDiv({ cls: "image-importer-buttons" });
-		const progressEl = buttonRow.createDiv({ cls: "image-importer-progress" });
-		progressEl.style.display = "none";
+		const progressEl = buttonRow.createDiv({ cls: "image-importer-progress hidden" });
 		const importBtn = buttonRow.createEl("button", { text: "Import", cls: "mod-cta" });
 		importBtn.disabled = true;
 
@@ -483,9 +483,9 @@ class ImageImportModal extends Modal {
 			importBtn.disabled = this.selectedFiles.length === 0 || (!this.selectedTemplate && !this.selectedFileToAddTo);
 		};
 
-		const schedulePreview = () => {
+		const schedulePreview = (): void => {
 			if (this.previewDebounce) clearTimeout(this.previewDebounce);
-			this.previewDebounce = setTimeout(() => refreshSizePreviews(), 450);
+			this.previewDebounce = setTimeout((): void => { void refreshSizePreviews(); }, 450);
 		};
 
 		const refreshSizePreviews = async () => {
@@ -501,7 +501,7 @@ class ImageImportModal extends Modal {
 					continue;
 				}
 
-				cell.textContent = "estimating…";
+				cell.textContent = "Estimating…";
 				cell.className = "size-cell size-estimating";
 
 				try {
@@ -513,13 +513,13 @@ class ImageImportModal extends Modal {
 						: `${formatBytes(ns)} (+${Math.abs(pct)}%)`;
 					cell.className = "size-cell " + (ns < f.size ? "size-smaller" : "size-larger");
 				} catch {
-					cell.textContent = "preview failed";
+					cell.textContent = "Preview failed";
 					cell.className = "size-cell size-error";
 				}
 			}
 		};
 
-		const handleFiles = (files: File[]) => {
+		const handleFiles = (files: File[]): void => {
 			const imgs = files.filter(f => f.type.startsWith("image/"));
 			if (imgs.length === 0) { new Notice("No image files detected."); return; }
 
@@ -540,7 +540,8 @@ class ImageImportModal extends Modal {
 					tbody.querySelectorAll(`tr[data-file="${CSS.escape(f.name)}"]`).forEach(r => r.remove());
 					this.imageNameMap.delete(f.name);
 					this.noteNameMap.delete(f.name);
-					if (this.selectedFiles.length === 0) nameSection.style.display = "none";
+					if (this.selectedFiles.length === 0) nameSection.addClass("hidden");
+					else nameSection.removeClass("hidden");
 					updateImportButton();
 				});
 
@@ -560,7 +561,7 @@ class ImageImportModal extends Modal {
 					type: "text",
 					value: origBase,
 					cls: "image-importer-name-input img-name-input",
-				}) as HTMLInputElement;
+				});
 				imgInput.addEventListener("input", () => {
 					this.imageNameMap.set(f.name, imgInput.value.trim() || origBase);
 				});
@@ -576,72 +577,81 @@ class ImageImportModal extends Modal {
 					type: "text",
 					value: origBase,
 					cls: "image-importer-name-input note-name-input",
-				}) as HTMLInputElement;
+				});
 				noteInput.addEventListener("input", () => {
 					this.noteNameMap.set(f.name, noteInput.value.trim() || origBase);
 				});
 			}
 
-			nameSection.style.display = "block";
+			nameSection.removeClass("hidden");
 			updateImportButton();
-			if (this.compress) refreshSizePreviews();
+			if (this.compress) refreshSizePreviews().catch((err) => {
+				console.error("Well, this is slightly embarrassing... But I hope you are able to see what the issue is from this error. Hint: this was fired from the 'refreshSizePreviews()' method.\n\n", err);
+			});;
 		};
 
 		// ── Import ─────────────────────────────────────────────────────────────
-		importBtn.addEventListener("click", async () => {
-			if (!this.selectedTemplate && !this.selectedFileToAddTo) { 
-				new Notice("Please select a template or file first."); 
-				return; 
-			}
-			if (this.selectedFiles.length === 0) { new Notice("Please select at least one image."); return; }
-
-			importBtn.disabled = true;
-			importBtn.textContent = this.removeBg ? "Removing backgrounds…" : "Importing…";
-			progressEl.style.display = "block";
-			progressEl.textContent = `0 / ${this.selectedFiles.length}`;
-
-			let templateContent = "";
-			if (this.selectedTemplate) {
-				templateContent = await this.plugin.readTemplate(this.selectedTemplate);
-			}
-
-			const entries: ImportEntry[] = this.selectedFiles.map(f => ({
-				file: f,
-				imageBaseName: this.imageNameMap.get(f.name) || f.name.replace(/\.[^/.]+$/, ""),
-				noteTitle: this.noteNameMap.get(f.name) || f.name.replace(/\.[^/.]+$/, ""),
-			}));
-
-			const results = await this.plugin.importImages(
-				entries,
-				templateContent,
-				this.compress,
-				this.quality,
-				this.removeBg,
-				this.selectedFileToAddTo,
-				(i, total, label) => {
-					progressEl.textContent = label
-						? `${i + 1} / ${total}: ${label}`
-						: "Done";
+		importBtn.addEventListener("click", () => {
+			void (async (): Promise<void> => {
+				if (!this.selectedTemplate && !this.selectedFileToAddTo) {
+					new Notice("Please select a template or file first.");
+					return;
 				}
-			);
 
-			progressEl.style.display = "none";
+				if (this.selectedFiles.length === 0) {
+					new Notice("Please select at least one image.");
+					return;
+				}
 
-			const savedMsg = results.savedBytes > 0
-				? ` Saved ${formatBytes(results.savedBytes)}.` : "";
+				importBtn.disabled = true;
+				importBtn.textContent = "Importing...";
+				progressEl.removeClass("hidden");
+				progressEl.textContent = `0 / ${this.selectedFiles.length}`;
 
-			if (results.errors.length > 0) {
-				new Notice(
-					`Imported ${results.success} note(s).${savedMsg}\n` +
-					`${results.errors.length} error(s):\n${results.errors.join("\n")}`,
-					8000
+				let templateContent = "";
+				if (this.selectedTemplate) {
+					templateContent = await this.plugin.readTemplate(this.selectedTemplate);
+				}
+
+				const entries: ImportEntry[] = this.selectedFiles.map(f => ({
+					file: f,
+					imageBaseName: this.imageNameMap.get(f.name) || f.name.replace(/\.[^/.]+$/, ""),
+					noteTitle: this.noteNameMap.get(f.name) || f.name.replace(/\.[^/.]+$/, ""),
+				}));
+
+				const results = await this.plugin.importImages(
+					entries,
+					templateContent,
+					this.compress,
+					this.quality,
+					this.selectedFileToAddTo,
+					(i, total, label) => {
+						progressEl.textContent = label
+							? `${i + 1} / ${total}: ${label}`
+							: "Done";
+					}
 				);
-				importBtn.disabled = false;
-				importBtn.textContent = "Import";
-			} else {
-				new Notice(`✓ Imported ${results.success} note(s).${savedMsg}`);
-				this.close();
-			}
+
+				progressEl.addClass("hidden");
+
+				const savedMsg =
+					results.savedBytes > 0
+						? ` Saved ${formatBytes(results.savedBytes)}.`
+						: "";
+
+				if (results.errors.length > 0) {
+					new Notice(
+						`Imported ${results.success} note(s).${savedMsg}\n` +
+						`${results.errors.length} error(s):\n${results.errors.join("\n")}`,
+						8000
+					);
+					importBtn.disabled = false;
+					importBtn.textContent = "Import";
+				} else {
+					new Notice(`✓ Imported ${results.success} note(s).${savedMsg}`);
+					this.close();
+				}
+			})();
 		});
 	}
 

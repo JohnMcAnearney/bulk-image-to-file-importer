@@ -4,10 +4,21 @@
     padding: 1.5rem;
 }
 
+.image-importer-modal-parent {
+    max-width: 1200px !important;
+    width: 90vw !important;
+}
+
 .image-importer-modal h2 {
     margin-bottom: 1.5rem;
     font-size: 1.3rem;
     font-weight: 600;
+}
+
+/* ─── Utility Classes ─────────────────────────────────────────────────── */
+
+.hidden {
+    display: none !important;
 }
 
 .image-importer-modal h3 {

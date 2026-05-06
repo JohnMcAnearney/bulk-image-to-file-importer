@@ -28,7 +28,6 @@
 	"dependencies": {
 		"@imgly/background-removal": "^1.7.0",
 		"exifreader": "^4.38.1",
-		"js-yaml": "^4.1.1",
 		"node-geocoder": "^4.4.1",
 		"obsidian": "latest"
 	}
