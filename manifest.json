@@ -1,7 +1,7 @@
 {
 	"id": "bulk-image-to-file-importer",
 	"name": "Bulk Image to File Importer",
-	"version": "1.0.0",
+	"version": "1.0.2",
 	"minAppVersion": "1.4.0",
 	"description": "Add images to a single file or create a new file for each image in bulk.",
 	"author": "JohnMcAnearney",
