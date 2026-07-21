@@ -1,5 +1,5 @@
 {
-	"id": "bulk-bmage-to-file-importer",
+	"id": "bulk-image-to-file-importer",
 	"name": "Bulk Image to File Importer",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
