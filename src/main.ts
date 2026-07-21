@@ -256,7 +256,7 @@ class ImageImportModal extends Modal {
 
 				// ── 1. Image picker ────────────────────────────────────────────────────
 		const helperText: string = "PNG · JPG · WEBP · GIF supported";
-		contentEl.createEl("h2", { text: "Step 1 - Select  📸" });
+		contentEl.createEl("h2", { text: "Step 1: select  📸" });
 		const dropZone = contentEl.createDiv({ cls: "image-importer-dropzone" });
 		dropZone.createEl("p", { text: "Drop images here or click to browse" });
 		dropZone.createEl("p", { text: helperText, cls: "image-importer-hint" });
@@ -280,7 +280,7 @@ class ImageImportModal extends Modal {
 
 		// ── 2. Options ────────────────────────────────────────────────────────
 				// ── 3. Options (compression + bg removal) ─────────────────────────────
-		contentEl.createEl("h2", { text: "Step 2 - Select options 📋" });
+		contentEl.createEl("h2", { text: "Step 2: select options 📋" });
 		const optionsBox = contentEl.createDiv({ cls: "image-importer-options-box" });
 
 		// — Compression —
@@ -327,7 +327,7 @@ class ImageImportModal extends Modal {
 
 		contentEl.createEl("h3", { text: "Create a note from a template" });
 		contentEl.createEl("p", { text: "- Your template *must* have a property named 'image' and be of type text.", cls: "image-importer-hint" });
-		contentEl.createEl("p", { text: "- Option 1 & 2 do not work together. Option 1 will be ignored if Option 2 is selected.", cls: "image-importer-hint" });
+		contentEl.createEl("p", { text: "- Option 1 & 2 do not work together. Option 1 will be ignored if option 2 is selected.", cls: "image-importer-hint" });
 
 		const templates = this.plugin.getTemplates();
 		if (templates.length === 0) {
@@ -415,7 +415,7 @@ class ImageImportModal extends Modal {
 
 		// ── 4. Name review table ───────────────────────────────────────────────
 		const nameSection = contentEl.createDiv({ cls: "image-importer-name-section hidden" });
-		nameSection.createEl("h2", { text: "Step 3 - Review filenames & note titles 📝" });
+		nameSection.createEl("h2", { text: "Step 3: review filenames & note titles 📝" });
 
 		// Bulk rename toolbar
 		const bulkRow = nameSection.createDiv({ cls: "image-importer-bulk-row" });
