@@ -5,7 +5,13 @@
 
 </div>
 
-Allows you to bulk import images as their own files or to add all these images to one specific file. 
+## What?
+
+Allows you to bulk import images:
+1. As their own file ***without*** a template
+2. As their own file ***with*** a template
+3. Append images to an existing file
+
 
 If an image with the same name already exists, it will not be uploaded to your vault again. It will just be referenced as expected.
 
@@ -23,3 +29,6 @@ Since I created this plugin to serve two specific purposes of my own, I feel tha
 
 # Donations
 If you're thinking of donating, please just donate to [Obsidian](https://obsidian.md/pricing). I think this is a great tool and we should support its development. 
+
+# What it looks like
+![Bulk Image Importer Main Menu](Obsidian-Plugin_Bulk_Image_Importer.png "Example of what it looks like")

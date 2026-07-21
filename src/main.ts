@@ -252,11 +252,82 @@ class ImageImportModal extends Modal {
 		}
 		contentEl.empty();
 		contentEl.addClass("image-importer-modal");
-		contentEl.createEl("h2", { text: "Import images as notes" });
+		contentEl.createEl("h1", { text: "Import images as notes" });
 
-		// ── 1. Template ────────────────────────────────────────────────────────
-		contentEl.createEl("h3", { text: "Option 1. Create a note from a template" });
-		contentEl.createEl("p", { text: "Your template *must* have a property named 'image' and be of type text.", cls: "image-importer-hint" });
+				// ── 1. Image picker ────────────────────────────────────────────────────
+		const helperText: string = "PNG · JPG · WEBP · GIF supported";
+		contentEl.createEl("h2", { text: "Step 1 - Select  📸" });
+		const dropZone = contentEl.createDiv({ cls: "image-importer-dropzone" });
+		dropZone.createEl("p", { text: "Drop images here or click to browse" });
+		dropZone.createEl("p", { text: helperText, cls: "image-importer-hint" });
+
+		const fileInput = contentEl.createEl("input", { type: "file", cls: "image-importer-hidden-input" });
+		fileInput.multiple = true;
+		fileInput.accept = "image/*";
+
+		dropZone.addEventListener("click", () => fileInput.click());
+		dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.addClass("drag-over"); });
+		dropZone.addEventListener("dragleave", () => dropZone.removeClass("drag-over"));
+		dropZone.addEventListener("drop", e => {
+			e.preventDefault(); dropZone.removeClass("drag-over");
+			if (e.dataTransfer?.files) handleFiles(Array.from(e.dataTransfer.files));
+		});
+		fileInput.addEventListener("change", () => {
+			if (fileInput.files) handleFiles(Array.from(fileInput.files));
+		});
+
+		const fileListEl = contentEl.createDiv({ cls: "image-importer-filelist" });
+
+		// ── 2. Options ────────────────────────────────────────────────────────
+				// ── 3. Options (compression + bg removal) ─────────────────────────────
+		contentEl.createEl("h2", { text: "Step 2 - Select options 📋" });
+		const optionsBox = contentEl.createDiv({ cls: "image-importer-options-box" });
+
+		// — Compression —
+		const compressRow = optionsBox.createDiv({ cls: "image-importer-option-row" });
+		const compCb = compressRow.createEl("input", { type: "checkbox" });
+		compCb.id = "img-compress-toggle";
+		compCb.checked = this.compress;
+		const compLabel = compressRow.createEl("label", { text: "Convert to JPEG and compress" });
+		compLabel.htmlFor = "img-compress-toggle";
+
+		// Quality integer input (shown when compress is on)
+		const qualityRow = optionsBox.createDiv({ cls: "image-importer-quality-row" });
+		if (!this.compress) qualityRow.addClass("hidden");
+		qualityRow.createEl("label", { text: "Quality (1–100)", cls: "image-importer-quality-label" });
+		const qualityInput = qualityRow.createEl("input", { type: "number" });
+		qualityInput.min = "1";
+		qualityInput.max = "100";
+		qualityInput.value = String(this.quality);
+		qualityInput.addClass("image-importer-quality-input");
+		qualityRow.createEl("span", { text: "Lower = smaller file, more artifacts.", cls: "image-importer-hint" });
+
+		compCb.addEventListener("change", () => {
+			this.compress = compCb.checked;
+			if (this.compress) qualityRow.removeClass("hidden");
+			else qualityRow.addClass("hidden");
+			if (this.selectedFiles.length > 0) schedulePreview();
+		});
+		qualityInput.addEventListener("change", () => {
+			this.quality = clampQuality(parseInt(qualityInput.value) || this.quality);
+			qualityInput.value = String(this.quality);
+			if (this.compress && this.selectedFiles.length > 0) schedulePreview();
+		});
+		qualityInput.addEventListener("input", () => {
+			const v = parseInt(qualityInput.value);
+			if (!isNaN(v)) {
+				this.quality = clampQuality(v);
+				schedulePreview();
+			}
+		});
+
+		// Divider
+		// optionsBox.createEl("hr", { cls: "image-importer-divider" });
+
+
+		contentEl.createEl("h3", { text: "Create a note from a template" });
+		contentEl.createEl("p", { text: "- Your template *must* have a property named 'image' and be of type text.", cls: "image-importer-hint" });
+		contentEl.createEl("p", { text: "- Option 1 & 2 do not work together. Option 1 will be ignored if Option 2 is selected.", cls: "image-importer-hint" });
 
 		const templates = this.plugin.getTemplates();
 		if (templates.length === 0) {
@@ -281,10 +352,10 @@ class ImageImportModal extends Modal {
 		});
 
 		// Divider
-		contentEl.createEl("hr", { cls: "image-importer-divider" });
+		// contentEl.createEl("hr", { cls: "image-importer-divider" });
 
 		// File search
-		contentEl.createEl("h3", { text: "Option 2. Append images to an existing note" });
+		contentEl.createEl("h3", { text: "Append images to an existing note" });
 		contentEl.createEl("label", { text: "Search for a file:", cls: "image-importer-section-label" });
 		const fileSearchContainer = contentEl.createDiv({ cls: "image-importer-file-search" });
 		const fileSearchInput = fileSearchContainer.createEl("input", {
@@ -340,78 +411,11 @@ class ImageImportModal extends Modal {
 			}, 300);
 		});
 
-		// ── 2. Image picker ────────────────────────────────────────────────────
-		const helperText: string = "PNG · JPG · WEBP · GIF supported";
-		contentEl.createEl("h3", { text: "2. Select images." });
-		const dropZone = contentEl.createDiv({ cls: "image-importer-dropzone" });
-		dropZone.createEl("p", { text: "Drop images here or click to browse" });
-		dropZone.createEl("p", { text: helperText, cls: "image-importer-hint" });
-
-		const fileInput = contentEl.createEl("input", { type: "file", cls: "image-importer-hidden-input" });
-		fileInput.multiple = true;
-		fileInput.accept = "image/*";
-
-		dropZone.addEventListener("click", () => fileInput.click());
-		dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.addClass("drag-over"); });
-		dropZone.addEventListener("dragleave", () => dropZone.removeClass("drag-over"));
-		dropZone.addEventListener("drop", e => {
-			e.preventDefault(); dropZone.removeClass("drag-over");
-			if (e.dataTransfer?.files) handleFiles(Array.from(e.dataTransfer.files));
-		});
-		fileInput.addEventListener("change", () => {
-			if (fileInput.files) handleFiles(Array.from(fileInput.files));
-		});
-
-		const fileListEl = contentEl.createDiv({ cls: "image-importer-filelist" });
-
-		// ── 3. Options (compression + bg removal) ─────────────────────────────
-		contentEl.createEl("h3", { text: "3. Options" });
-		const optionsBox = contentEl.createDiv({ cls: "image-importer-options-box" });
-
-		// — Compression —
-		const compressRow = optionsBox.createDiv({ cls: "image-importer-option-row" });
-		const compCb = compressRow.createEl("input", { type: "checkbox" });
-		compCb.id = "img-compress-toggle";
-		compCb.checked = this.compress;
-		const compLabel = compressRow.createEl("label", { text: "Convert to JPEG and compress" });
-		compLabel.htmlFor = "img-compress-toggle";
-
-		// Quality integer input (shown when compress is on)
-		const qualityRow = optionsBox.createDiv({ cls: "image-importer-quality-row" });
-		if (!this.compress) qualityRow.addClass("hidden");
-		qualityRow.createEl("label", { text: "Quality (1–100)", cls: "image-importer-quality-label" });
-		const qualityInput = qualityRow.createEl("input", { type: "number" });
-		qualityInput.min = "1";
-		qualityInput.max = "100";
-		qualityInput.value = String(this.quality);
-		qualityInput.addClass("image-importer-quality-input");
-		qualityRow.createEl("span", { text: "Lower = smaller file, more artifacts.", cls: "image-importer-hint" });
-
-		compCb.addEventListener("change", () => {
-			this.compress = compCb.checked;
-			if (this.compress) qualityRow.removeClass("hidden");
-			else qualityRow.addClass("hidden");
-			if (this.selectedFiles.length > 0) schedulePreview();
-		});
-		qualityInput.addEventListener("change", () => {
-			this.quality = clampQuality(parseInt(qualityInput.value) || this.quality);
-			qualityInput.value = String(this.quality);
-			if (this.compress && this.selectedFiles.length > 0) schedulePreview();
-		});
-		qualityInput.addEventListener("input", () => {
-			const v = parseInt(qualityInput.value);
-			if (!isNaN(v)) {
-				this.quality = clampQuality(v);
-				schedulePreview();
-			}
-		});
-
-		// Divider
-		optionsBox.createEl("hr", { cls: "image-importer-divider" });
+		contentEl.createEl("hr", { cls: "image-importer-divider" });
 
 		// ── 4. Name review table ───────────────────────────────────────────────
 		const nameSection = contentEl.createDiv({ cls: "image-importer-name-section hidden" });
-		nameSection.createEl("h3", { text: "4. Review filenames & note titles" });
+		nameSection.createEl("h2", { text: "Step 3 - Review filenames & note titles 📝" });
 
 		// Bulk rename toolbar
 		const bulkRow = nameSection.createDiv({ cls: "image-importer-bulk-row" });
