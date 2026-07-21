@@ -326,8 +326,8 @@ class ImageImportModal extends Modal {
 
 
 		contentEl.createEl("h3", { text: "Create a note from a template" });
-		contentEl.createEl("p", { text: "- Your template *must* have a property named 'image' and be of type text.", cls: "image-importer-hint" });
-		contentEl.createEl("p", { text: "- Option 1 & 2 do not work together. Option 1 will be ignored if option 2 is selected.", cls: "image-importer-hint" });
+		contentEl.createEl("p", { text: "1) your template *must* have a property named 'image' and be of type text.", cls: "image-importer-hint" });
+		contentEl.createEl("p", { text: "2) option 1 & 2 do not work together. Option 1 will be ignored if option 2 is selected.", cls: "image-importer-hint" });
 
 		const templates = this.plugin.getTemplates();
 		if (templates.length === 0) {
