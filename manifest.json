@@ -2,10 +2,9 @@
 	"id": "bulk-image-to-file-importer",
 	"name": "Bulk Image to File Importer",
 	"version": "1.0.0",
-	"minAppVersion": "0.15.0",
+	"minAppVersion": "1.4.0",
 	"description": "Add images to a single file or create a new file for each image in bulk.",
 	"author": "JohnMcAnearney",
 	"authorUrl": "https://johnmcanearney.com/",
-	"fundingUrl": "https://obsidian.md/pricing",
 	"isDesktopOnly": false
 }

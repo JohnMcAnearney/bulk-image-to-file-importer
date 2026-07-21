@@ -1,4 +1,4 @@
-<h1 align="center">Bulk Image Importer for Obsidian</h1>
+<h1 align="center">Bulk mage to File Importer</h1>
 <div align="center">
 
 ![Obsidian Downloads](https://img.shields.io/badge/dynamic/json?logo=obsidian&color=%23483699&label=downloads&query=%24%5B%22bulk-image-to-file-importer%22%5D.downloads&url=https%3A%2F%2Fraw.githubusercontent.com%2Fobsidianmd%2Fobsidian-releases%2Fmaster%2Fcommunity-plugin-stats.json) ![latest download](https://img.shields.io/github/downloads/JohnMcAnearney/Obsidian-Bulk_Image_Importer/latest/total?style=plastic)
@@ -30,5 +30,32 @@ Since I created this plugin to serve two specific purposes of my own, I feel tha
 # Donations
 If you're thinking of donating, please just donate to [Obsidian](https://obsidian.md/pricing). I think this is a great tool and we should support its development. 
 
-# What it looks like
+# Usage
 ![Bulk Image Importer Main Menu](Obsidian-Plugin_Bulk_Image_Importer.png "Example of what it looks like")
+## Main Application
+###  Step 1 - Select Images
+Simply drag multiple files over the grey area or click on the grey area to open the file selector and select multiple files.
+
+You will then see all of your images. You can press the [X] button to remove them from the import
+
+### Step 2 - Select Options
+#### Compression
+Tick the box to convert the image to JPEG. This just saves space in your vault. Play about with the amount of compression before the image is unusable. 
+
+Once you change the compression value, you will see in the table at the bottom what the new file size will be.
+
+#### Create note from template
+Selecting a template will create the image's .md file with that template. This is useful when you are importing lots of clothes and you want them to have the same properties(frontmatter), for example.
+
+#### Append Images
+This option ***replaces*** the template option i.e., if you select a template and a note to add it to, the selected note's properties(frontmatter) will remain as is.
+
+### Step 3 - Review filenames
+Here you can quickly change the names of all the files. 
+
+You can also use the two button on the first row to apply a common name to all of them. This will append '_1', '_2' and so on... to all the images. 
+
+E.g., italy_trip_day_2 --> italy_trip_day_2_1, italy_trip_day_2_2, italy_trip_day_2_3, italy_trip_day_2_4...
+
+## Settings
+![Bulk Image Importer Settings Menu](Obsidian-Plugin_Bulk_Image_Importer_Settings.png "Example of what the settings looks like")
